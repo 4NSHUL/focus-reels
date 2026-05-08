@@ -101,6 +101,7 @@ class FocusReelsApp extends HTMLElement {
     this.currentIndex = 0;
     this.nextCursor = 0;
     this.loading = false;
+    this.refreshing = false;
     this.paused = false;
     this.locked = false;
     this.online = navigator.onLine;
@@ -236,6 +237,49 @@ class FocusReelsApp extends HTMLElement {
     }
   }
 
+  async refreshContent() {
+    if (this.loading || this.refreshing) {
+      return;
+    }
+
+    const refreshKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    this.loading = true;
+    this.refreshing = true;
+    this.source = "refreshing";
+    this.updateHud();
+
+    try {
+      const response = await fetch(`/api/feed?cursor=0&limit=${BATCH_SIZE}&refresh=1&llm=auto&refreshKey=${encodeURIComponent(refreshKey)}`, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error("Refresh request failed");
+      }
+
+      const payload = await response.json();
+      this.items = payload.items;
+      this.nextCursor = payload.nextCursor;
+      this.currentIndex = 0;
+      this.progress = 0;
+      this.source = payload.source || "fresh batch";
+    } catch {
+      this.nextCursor = Math.floor(Date.now() / 1000) % 10000;
+      const batch = this.makeOfflineBatch(BATCH_SIZE);
+      this.items = batch.items;
+      this.nextCursor = batch.nextCursor;
+      this.currentIndex = 0;
+      this.progress = 0;
+      this.source = "offline refresh";
+    } finally {
+      this.loading = false;
+      this.refreshing = false;
+      this.feedEl.scrollTop = 0;
+      this.renderFeed();
+      this.updateHud();
+    }
+  }
+
   makeOfflineBatch(limit) {
     const start = this.nextCursor;
     const items = Array.from({ length: limit }, (_, offset) => {
@@ -359,6 +403,9 @@ class FocusReelsApp extends HTMLElement {
           <button class="rail-button" type="button" title="Share" aria-label="Copy link" data-action="share" data-item-id="${escapeHtml(item.id)}">
             <span class="rail-label">COPY</span>
           </button>
+          <button class="rail-button${this.refreshing ? " is-active" : ""}" type="button" title="Refresh content" aria-label="Refresh content" data-action="refresh">
+            <span class="rail-label">FRESH</span>
+          </button>
           <button class="rail-button" type="button" title="Focus" aria-label="Jump to focus check" data-action="focus-now">
             <span class="rail-label">WORK</span>
           </button>
@@ -435,6 +482,10 @@ class FocusReelsApp extends HTMLElement {
 
     if (action === "focus-now") {
       this.jumpToNextFocus();
+    }
+
+    if (action === "refresh") {
+      this.refreshContent();
     }
 
     if (action === "music") {
@@ -803,7 +854,9 @@ class FocusReelsApp extends HTMLElement {
       streak.textContent = `${this.stats.streak} streak`;
     }
     if (status) {
-      if (this.loading) {
+      if (this.refreshing) {
+        status.textContent = "refreshing";
+      } else if (this.loading) {
         status.textContent = "loading";
       } else if (!this.online) {
         status.textContent = "offline";

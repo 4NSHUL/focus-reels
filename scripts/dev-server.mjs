@@ -18,7 +18,7 @@ const contentTypes = {
   ".webmanifest": "application/manifest+json; charset=utf-8"
 };
 
-function sendJson(handler, req, res) {
+async function sendJson(handler, req, res) {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const response = {
     setHeader: (key, value) => res.setHeader(key, value),
@@ -31,7 +31,7 @@ function sendJson(handler, req, res) {
     }
   };
 
-  handler({
+  await handler({
     ...req,
     query: Object.fromEntries(url.searchParams.entries())
   }, response);
@@ -71,7 +71,14 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
   if (url.pathname === "/api/feed") {
-    sendJson(feedHandler, req, res);
+    try {
+      await sendJson(feedHandler, req, res);
+    } catch {
+      res.writeHead(500, {
+        "Content-Type": "application/json; charset=utf-8"
+      });
+      res.end(JSON.stringify({ error: "Feed failed" }));
+    }
     return;
   }
 

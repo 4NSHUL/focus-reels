@@ -41,6 +41,11 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (url.pathname === "/api/feed") {
+    if (url.searchParams.has("refresh")) {
+      event.respondWith(fetch(request));
+      return;
+    }
+
     event.respondWith(
       fetch(request)
         .then((response) => {
