@@ -86,6 +86,55 @@ function topVisualMarkup(item) {
   `;
 }
 
+function railIconMarkup(name) {
+  const icons = {
+    like: `
+      <svg viewBox="0 0 24 24" role="img" focusable="false">
+        <path class="icon-fill" d="M12 21s-7.2-4.6-9.5-9.1C.7 8.5 2.6 4.5 6.4 4.1c2-.2 3.6.7 4.6 2.1 1-1.4 2.6-2.3 4.6-2.1 3.8.4 5.7 4.4 3.9 7.8C19.2 16.4 12 21 12 21Z"></path>
+      </svg>
+    `,
+    save: `
+      <svg viewBox="0 0 24 24" role="img" focusable="false">
+        <path d="M7 4.5h10a1 1 0 0 1 1 1v15l-6-3.8-6 3.8v-15a1 1 0 0 1 1-1Z"></path>
+      </svg>
+    `,
+    share: `
+      <svg viewBox="0 0 24 24" role="img" focusable="false">
+        <path d="M8.5 12.5 15.5 8"></path>
+        <path d="M8.5 12.5 15.5 16"></path>
+        <circle cx="6.5" cy="13" r="2.4"></circle>
+        <circle cx="17.5" cy="7" r="2.4"></circle>
+        <circle cx="17.5" cy="17" r="2.4"></circle>
+      </svg>
+    `,
+    refresh: `
+      <svg viewBox="0 0 24 24" role="img" focusable="false">
+        <path d="M20 11a8 8 0 0 0-14.1-5.2"></path>
+        <path d="M6 3v4.8h4.8"></path>
+        <path d="M4 13a8 8 0 0 0 14.1 5.2"></path>
+        <path d="M18 21v-4.8h-4.8"></path>
+      </svg>
+    `,
+    work: `
+      <svg viewBox="0 0 24 24" role="img" focusable="false">
+        <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"></path>
+        <path d="M5.5 7h13A1.5 1.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-8A1.5 1.5 0 0 1 5.5 7Z"></path>
+        <path d="M4 12.5h16"></path>
+        <path d="M10 12.5v1h4v-1"></path>
+      </svg>
+    `,
+    music: `
+      <svg viewBox="0 0 24 24" role="img" focusable="false">
+        <path d="M9 18.5a2.7 2.7 0 1 1-2.7-2.7H9V5.5l9-1.8v11.8"></path>
+        <path d="M18 15.5a2.7 2.7 0 1 1-2.7-2.7H18"></path>
+        <path d="M9 8.5 18 6.7"></path>
+      </svg>
+    `
+  };
+
+  return `<span class="rail-icon" aria-hidden="true">${icons[name] || icons.like}</span>`;
+}
+
 class FocusReelsApp extends HTMLElement {
   constructor() {
     super();
@@ -394,23 +443,23 @@ class FocusReelsApp extends HTMLElement {
           </div>
         </div>
         <nav class="right-rail" aria-label="Reel actions">
-          <button class="rail-button${liked ? " is-active" : ""}" type="button" title="Like" aria-label="Like reel" data-action="like" data-item-id="${escapeHtml(item.id)}">
-            <span class="rail-label">LIKE</span>
+          <button class="rail-button${liked ? " is-active" : ""}" type="button" title="Like" aria-label="Like reel" data-rail="like" data-action="like" data-item-id="${escapeHtml(item.id)}">
+            ${railIconMarkup("like")}
           </button>
-          <button class="rail-button${saved ? " is-active" : ""}" type="button" title="Save" aria-label="Save reel" data-action="save" data-item-id="${escapeHtml(item.id)}">
-            <span class="rail-label">SAVE</span>
+          <button class="rail-button${saved ? " is-active" : ""}" type="button" title="Save" aria-label="Save reel" data-rail="save" data-action="save" data-item-id="${escapeHtml(item.id)}">
+            ${railIconMarkup("save")}
           </button>
-          <button class="rail-button" type="button" title="Share" aria-label="Copy link" data-action="share" data-item-id="${escapeHtml(item.id)}">
-            <span class="rail-label">COPY</span>
+          <button class="rail-button" type="button" title="Share" aria-label="Copy link" data-rail="share" data-action="share" data-item-id="${escapeHtml(item.id)}">
+            ${railIconMarkup("share")}
           </button>
-          <button class="rail-button${this.refreshing ? " is-active" : ""}" type="button" title="Refresh content" aria-label="Refresh content" data-action="refresh">
-            <span class="rail-label">FRESH</span>
+          <button class="rail-button${this.refreshing ? " is-active" : ""}" type="button" title="Refresh content" aria-label="Refresh content" data-rail="refresh" data-action="refresh">
+            ${railIconMarkup("refresh")}
           </button>
-          <button class="rail-button" type="button" title="Focus" aria-label="Jump to focus check" data-action="focus-now">
-            <span class="rail-label">WORK</span>
+          <button class="rail-button" type="button" title="Focus" aria-label="Jump to focus check" data-rail="work" data-action="focus-now">
+            ${railIconMarkup("work")}
           </button>
-          <button class="rail-button${this.audioOn ? " is-active" : ""}" type="button" title="Music" aria-label="Toggle focus music" data-action="music">
-            <span class="rail-label">MUSIC</span>
+          <button class="rail-button${this.audioOn ? " is-active" : ""}" type="button" title="Music" aria-label="Toggle focus music" data-rail="music" data-action="music">
+            ${railIconMarkup("music")}
           </button>
         </nav>
         <div class="progress-track" aria-hidden="true"><div class="progress-fill"></div></div>
