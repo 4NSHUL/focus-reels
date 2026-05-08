@@ -9,15 +9,16 @@ const seeds = JSON.parse(readFileSync(seedPath, "utf8"));
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 100;
 const FOCUS_INTERVAL = 18;
-const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
-const DEFAULT_OLLAMA_MODEL = "smollm2:135m";
-const DEFAULT_HF_MODEL = "HuggingFaceTB/SmolLM2-135M-Instruct";
-const HF_CHAT_COMPLETIONS_URL = "https://router.huggingface.co/v1/chat/completions";
-const GENERATED_SEED_LIMIT = 6;
-const LLM_TIMEOUT_MS = 4500;
 const INTERNET_TIMEOUT_MS = 3800;
 const GOOGLE_BOOKS_VOLUME_URL = "https://www.googleapis.com/books/v1/volumes";
 const HN_API_BASE_URL = "https://hacker-news.firebaseio.com/v0";
+const GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search";
+const STOOQ_QUOTES_URL = "https://stooq.com/q/l/";
+const SOURCE_GROUPS = {
+  tech: "ai-tech",
+  books: "books",
+  news: "news-market"
+};
 const categories = [
   "AI Agents",
   "Software Engineering",
@@ -36,7 +37,36 @@ const bookRefreshQueries = [
   "Atomic Habits",
   "The Psychology of Money",
   "Designing Data-Intensive Applications",
-  "The Pragmatic Programmer"
+  "The Pragmatic Programmer",
+  "Thinking Fast and Slow",
+  "Four Thousand Weeks",
+  "Range David Epstein",
+  "Zero to One",
+  "The Mom Test",
+  "Staff Engineer",
+  "Accelerate DevOps",
+  "Clean Architecture",
+  "Make Time Jake Knapp"
+];
+const techNewsQueries = [
+  "\"AI agents\" OR \"software engineering\" OR \"developer tools\" when:7d",
+  "\"artificial intelligence\" \"software engineering\" when:7d",
+  "\"cybersecurity\" OR \"cloud computing\" OR \"open source\" when:7d"
+];
+const hotNewsQueries = [
+  "\"stock market\" OR Nvidia OR Microsoft OR Apple OR \"Federal Reserve\" when:1d",
+  "\"AI\" OR technology OR cybersecurity OR economy when:1d",
+  "\"climate\" OR travel OR startup OR \"space\" when:2d",
+  "\"S&P 500\" OR Nasdaq OR earnings OR inflation when:2d"
+];
+const stooqSymbols = [
+  "aapl.us",
+  "msft.us",
+  "nvda.us",
+  "spy.us",
+  "qqq.us",
+  "tsla.us",
+  "amd.us"
 ];
 const trendTopics = [
   {
@@ -44,7 +74,7 @@ const trendTopics = [
     visual: "agent",
     art: "nodes",
     label: "Agent Interview Drill",
-    keywords: ["agent", "agents", "llm", "ai", "model", "prompt", "openai", "claude", "chatgpt"],
+    keywords: ["agent", "agents", "ai", "model", "prompt", "openai", "claude", "chatgpt", "automation"],
     question: (title) => `Interview question: how would you evaluate and safely ship an agent feature related to "${title}"?`,
     choices: [
       "Define success metrics, failure modes, eval cases, guardrails, and rollback.",
@@ -133,7 +163,7 @@ function toPositiveInteger(value, fallback, max) {
 }
 
 function boolValue(value) {
-  return ["1", "true", "yes", "on", "local", "ollama", "auto"].includes(String(value || "").toLowerCase());
+  return ["1", "true", "yes", "on"].includes(String(value || "").toLowerCase());
 }
 
 function stableSalt(value = "") {
@@ -193,15 +223,46 @@ function firstListValue(value, fallback = "") {
   return value || fallback;
 }
 
-function stripMarkup(value) {
+function decodeEntities(value) {
   return String(value || "")
-    .replace(/<[^>]*>/g, " ")
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
     .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(Number.parseInt(code, 16)));
+}
+
+function stripMarkup(value) {
+  return decodeEntities(value)
+    .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function ensureSentence(value, fallback) {
+  const text = cleanText(value, fallback, 260);
+  if (!text) {
+    return cleanText(fallback, "Use this as a thinking prompt.", 260);
+  }
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+function countSentences(value) {
+  return (String(value || "").match(/[.!?]+(?=\s|$)/g) || []).length;
+}
+
+function buildGoogleNewsUrl(query) {
+  const url = new URL(GOOGLE_NEWS_RSS_URL);
+  url.searchParams.set("q", query);
+  url.searchParams.set("hl", "en-US");
+  url.searchParams.set("gl", "US");
+  url.searchParams.set("ceid", "US:en");
+  return url;
 }
 
 async function fetchJson(url, { fetchImpl = fetch, timeout = INTERNET_TIMEOUT_MS, headers = {} } = {}) {
@@ -224,9 +285,67 @@ async function fetchJson(url, { fetchImpl = fetch, timeout = INTERNET_TIMEOUT_MS
   }
 }
 
+async function fetchText(url, { fetchImpl = fetch, timeout = INTERNET_TIMEOUT_MS, headers = {} } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetchImpl(url, {
+      signal: controller.signal,
+      headers
+    });
+
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`);
+    }
+
+    return response.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function extractXmlTag(block, tagName) {
+  const pattern = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "i");
+  return stripMarkup(block.match(pattern)?.[1] || "");
+}
+
+function parseRssItems(xml) {
+  const blocks = String(xml || "").match(/<item\b[\s\S]*?<\/item>/gi) || [];
+  return blocks.map((block, index) => ({
+    id: `rss-${stableSalt(`${extractXmlTag(block, "title")}-${index}`)}`,
+    title: extractXmlTag(block, "title"),
+    description: extractXmlTag(block, "description"),
+    link: extractXmlTag(block, "link"),
+    source: extractXmlTag(block, "source") || "Google News",
+    publishedAt: extractXmlTag(block, "pubDate")
+  })).filter((item) => item.title);
+}
+
 function pickTrendTopic(title = "") {
   const lowered = title.toLowerCase();
   return trendTopics.find((topic) => topic.keywords.some((keyword) => lowered.includes(keyword))) || trendTopics[1];
+}
+
+function buildBookSummaryBody({ title, author, description, subjects }) {
+  const descriptionSentence = ensureSentence(
+    description,
+    `${title} is useful because it gives you a practical lens for attention, judgment, or craft`
+  );
+  const subjectSentence = subjects.length
+    ? `The public book metadata points toward ${subjects.join(", ")}, which is enough to choose a reading angle before going deeper.`
+    : "Use the book as a thinking lens first, then verify the parts that matter with the full source.";
+  const sentences = [
+    `${title} by ${author} is a useful scroll when you want one idea you can test instead of another passive note.`,
+    descriptionSentence,
+    subjectSentence,
+    "The practical move is to translate the idea into one observable behavior you can repeat today.",
+    "If you are applying it to work, connect the idea to one meeting, one design choice, one habit, or one decision you are delaying.",
+    "Before the next reel, write the smallest action that would prove you understood the book rather than only recognizing its title."
+  ];
+  const body = sentences.join(" ");
+
+  return countSentences(body) >= 5 ? body : `${body} Turn the idea into a small test.`;
 }
 
 function makeBookApiSeed(volume, query, index) {
@@ -234,11 +353,10 @@ function makeBookApiSeed(volume, query, index) {
   const title = cleanText(info.title, query, 72);
   const author = cleanText(firstListValue(info.authors, "Unknown author"), "Unknown author", 72);
   const year = info.publishedDate ? `, published ${String(info.publishedDate).slice(0, 4)}` : "";
-  const description = cleanText(stripMarkup(info.description), "", 240);
+  const description = stripMarkup(info.description);
   const subjects = Array.isArray(info.categories)
     ? info.categories.map((subject) => cleanText(subject, "", 34)).filter(Boolean).slice(0, 3)
     : [];
-  const subjectLine = subjects.length ? `Google Books categories place it around ${subjects.join(", ")}.` : "Use the book as a thinking lens, not just a quote source.";
 
   return {
     id: `google-books-${stableSalt(`${title}-${author}`)}-${index}`,
@@ -246,10 +364,10 @@ function makeBookApiSeed(volume, query, index) {
     category: "Book Summaries",
     visual: "book",
     art: title.toLowerCase().includes("money") ? "market" : "book",
-    difficulty: "internet read",
+    difficulty: "live read",
     title,
     hook: `${author}${year}.`,
-    body: `${description || `${title} is useful as a compact mental-model read.`} ${subjectLine} Read for one practical idea, connect it to a current decision, and turn that idea into one observable action today.`,
+    body: buildBookSummaryBody({ title, author, description, subjects }),
     points: [
       `Source signal: ${author}${year}.`,
       subjects[0] ? `Main lens: ${subjects[0]}.` : "Extract one idea you can test this week.",
@@ -258,17 +376,18 @@ function makeBookApiSeed(volume, query, index) {
     ],
     reflection: `Where could "${title}" change one decision today?`,
     xp: 10,
-    tags: ["books", "internet", "reading"],
+    tags: ["books", "live", "reading"],
+    sourceGroup: SOURCE_GROUPS.books,
     sourceUrl: info.previewLink
   };
 }
 
-function makeHackerNewsSeed(item, index) {
+function makeTechTrendSeed(item, index, sourcePrefix = "tech") {
   const rawTitle = cleanText(item.title, "Fresh technical trend", 120);
   const topic = pickTrendTopic(rawTitle);
 
   return {
-    id: `hn-${item.id || stableSalt(rawTitle)}-${index}`,
+    id: `${sourcePrefix}-${item.id || stableSalt(rawTitle)}-${index}`,
     type: "quiz",
     category: topic.category,
     visual: topic.visual,
@@ -281,67 +400,82 @@ function makeHackerNewsSeed(item, index) {
     answerIndex: 0,
     explanation: topic.explanation,
     xp: 14,
-    tags: [...topic.tags, "internet"],
-    sourceUrl: item.url || `https://news.ycombinator.com/item?id=${item.id}`
+    tags: [...topic.tags, "live"],
+    sourceGroup: SOURCE_GROUPS.tech,
+    sourceUrl: item.url || item.link || (item.id ? `https://news.ycombinator.com/item?id=${item.id}` : undefined)
   };
 }
 
-function normaliseGeneratedSeed(candidate, index) {
-  if (!candidate || typeof candidate !== "object") {
-    return null;
-  }
-
-  const type = candidate.type === "quiz" ? "quiz" : "read";
-  const category = pickAllowed(candidate.category, categories, categories[index % (categories.length - 1)]);
-  const visual = pickAllowed(candidate.visual, visuals, "product");
-  const art = pickAllowed(candidate.art, arts, "generic");
-  const title = cleanText(candidate.title, `Fresh Insight ${index + 1}`, 64);
-  const hook = cleanText(candidate.hook, "A new useful scroll generated locally.", 140);
-  const body = cleanText(candidate.body, "Use this as a compact thinking prompt before the next action.", 260);
-  const xp = Math.max(8, Math.min(22, Number.parseInt(candidate.xp, 10) || 12));
-  const base = {
-    id: `llm-${stableSalt(`${title}-${hook}`)}-${index}`,
-    type,
-    category,
-    visual,
-    art,
-    difficulty: cleanText(candidate.difficulty, type === "quiz" ? "medium" : "quick read", 28),
-    title,
-    hook,
-    body,
-    xp,
-    tags: cleanTags(candidate.tags)
-  };
-
-  if (type === "quiz") {
-    const choices = Array.isArray(candidate.choices)
-      ? candidate.choices.map((choice) => cleanText(choice, "", 96)).filter(Boolean).slice(0, 3)
-      : [];
-
-    if (choices.length < 3) {
-      return null;
-    }
-
-    return {
-      ...base,
-      choices,
-      answerIndex: Math.max(0, Math.min(2, Number.parseInt(candidate.answerIndex, 10) || 0)),
-      explanation: cleanText(candidate.explanation, "The useful move is the one that protects clarity, feedback, or focus.", 220)
-    };
-  }
-
-  const points = Array.isArray(candidate.points)
-    ? candidate.points.map((point) => cleanText(point, "", 120)).filter(Boolean).slice(0, 4)
-    : [];
+function makeNewsCard(item, index) {
+  const title = cleanText(item.title, "Recent signal", 90);
+  const lowered = title.toLowerCase();
+  const marketLike = ["stock", "market", "nasdaq", "s&p", "nvidia", "apple", "microsoft", "fed", "earnings", "inflation", "rates"].some((word) => lowered.includes(word));
+  const source = cleanText(item.source, "Google News", 48);
+  const description = ensureSentence(item.description, "The headline is a live signal worth checking from more than one angle");
 
   return {
-    ...base,
-    points: points.length ? points : [
-      "Name the useful idea.",
-      "Apply it to one concrete decision.",
-      "Stop before the scroll turns passive."
+    id: `news-${item.id || stableSalt(title)}-${index}`,
+    type: "read",
+    category: marketLike ? "Stock Market" : "Product Thinking",
+    visual: marketLike ? "market" : "systems",
+    art: marketLike ? "market" : "generic",
+    difficulty: "recent brief",
+    title: marketLike ? "Market Signal" : "Hot Topic Brief",
+    hook: title,
+    body: `${description} Treat this as a live signal to investigate, not a conclusion to copy. Ask what changed, who is affected, and whether another credible source confirms the same direction. If the topic touches markets, separate business impact from price reaction before forming an opinion. Your useful move is to write one research question before you scroll again.`,
+    points: [
+      `Source: ${source}.`,
+      "Separate facts, incentives, and interpretation.",
+      marketLike ? "Ask whether the headline changes cash flows, risk, or time horizon." : "Ask who gains, who loses, and what constraint changed.",
+      "Save one follow-up question, not a vague opinion."
     ],
-    reflection: cleanText(candidate.reflection, "What is one move this changes today?", 160)
+    reflection: "What is the one question this headline makes you want to verify?",
+    xp: 11,
+    tags: marketLike ? ["news", "markets", "live"] : ["news", "hot-topic", "live"],
+    sourceGroup: SOURCE_GROUPS.news,
+    sourceUrl: item.link
+  };
+}
+
+function parseCsvRows(csv) {
+  const [headerLine, ...lines] = String(csv || "").trim().split(/\r?\n/);
+  const headers = (headerLine || "").split(",").map((header) => header.trim().toLowerCase());
+  return lines.map((line) => {
+    const values = line.split(",").map((value) => value.trim());
+    return Object.fromEntries(headers.map((header, index) => [header, values[index]]));
+  });
+}
+
+function makeMarketQuoteCard(row, index) {
+  const symbol = cleanText(String(row.symbol || "").replace(/\.US$/i, ""), "MARKET", 16).toUpperCase();
+  const close = Number.parseFloat(row.close);
+  const open = Number.parseFloat(row.open);
+  const move = Number.isFinite(close) && Number.isFinite(open) && open !== 0
+    ? `${(((close - open) / open) * 100).toFixed(2)}% from open`
+    : "live quote available";
+  const price = Number.isFinite(close) ? close.toFixed(2) : cleanText(row.close, "N/A", 16);
+
+  return {
+    id: `stooq-${symbol.toLowerCase()}-${row.date || "latest"}-${index}`,
+    type: "quiz",
+    category: "Stock Market",
+    visual: "market",
+    art: "market",
+    difficulty: "market process",
+    title: `${symbol} Snapshot`,
+    hook: `${symbol} last traded near ${price}; ${move}.`,
+    body: "What is the healthiest first question before reacting to this market move?",
+    choices: [
+      "What changed in fundamentals, expectations, or risk, and what would invalidate the thesis?",
+      "Buy or sell immediately because the price moved.",
+      "Ignore position sizing because the ticker is popular."
+    ],
+    answerIndex: 0,
+    explanation: "Price is a prompt for research; process, risk, and invalidation keep market learning healthy.",
+    xp: 13,
+    tags: ["markets", "quotes", "live"],
+    sourceGroup: SOURCE_GROUPS.news,
+    sourceUrl: "https://stooq.com/"
   };
 }
 
@@ -407,211 +541,154 @@ export function makeFeed({ cursor = 0, limit = DEFAULT_LIMIT, refreshKey = "", s
   };
 }
 
-function makeOllamaPrompt({ limit, refreshKey }) {
-  return `Create ${limit} short Focus Reels content seeds as strict JSON.
-Return only this shape: {"items":[...]}.
-Each item must be either:
-{"type":"quiz","category":"AI Agents|Software Engineering|Puzzles|Book Summaries|Travel|Stock Market|Product Thinking","visual":"agent|code|puzzle|book|travel|market|systems|security|career|product","art":"book|codeflow|generic|map|market|mind|nodes","difficulty":"easy|medium|hard","title":"under 6 words","hook":"one sentence","body":"one concrete prompt","choices":["A","B","C"],"answerIndex":0,"explanation":"one sentence","xp":12,"tags":["short","tags"]}
-or:
-{"type":"read","category":"AI Agents|Software Engineering|Puzzles|Book Summaries|Travel|Stock Market|Product Thinking","visual":"agent|code|puzzle|book|travel|market|systems|security|career|product","art":"book|codeflow|generic|map|market|mind|nodes","difficulty":"quick read","title":"under 6 words","hook":"one sentence","body":"two concise sentences","points":["point one","point two","point three"],"reflection":"one question","xp":9,"tags":["short","tags"]}.
-Mix AI agents, software engineering, puzzles, book summaries, travel thinking, and stock-market judgment. Avoid medical/legal/financial instructions; keep stock-market items educational and process-focused.
-Refresh key: ${refreshKey || "default"}.`;
-}
-
-function resolveLlmProvider(query = {}, allowLlm) {
-  if (allowLlm === false) {
-    return "off";
-  }
-
-  const requested = String(
-    query.provider ||
-    query.llm ||
-    process.env.FOCUS_REELS_LLM_PROVIDER ||
-    process.env.FOCUS_REELS_LLM ||
-    "auto"
-  ).toLowerCase();
-
-  if (requested === "off" || requested === "false") {
-    return "off";
-  }
-
-  if (requested === "hf" || requested === "huggingface") {
-    return process.env.HF_TOKEN ? "hf" : "off";
-  }
-
-  if (requested === "ollama" || requested === "local") {
-    if (process.env.VERCEL && !process.env.OLLAMA_BASE_URL) {
-      return "off";
-    }
-    return "ollama";
-  }
-
-  if (process.env.HF_TOKEN) {
-    return "hf";
-  }
-
-  if (!process.env.VERCEL && process.env.FOCUS_REELS_LLM === "ollama") {
-    return "ollama";
-  }
-
-  return "off";
-}
-
-function parseGeneratedSeeds(responseText) {
-  const parsed = JSON.parse(responseText || "{}");
-  const generatedSeeds = (Array.isArray(parsed.items) ? parsed.items : [])
-    .map((item, index) => normaliseGeneratedSeed(item, index))
-    .filter(Boolean);
-
-  if (generatedSeeds.length < 3) {
-    throw new Error("LLM returned too few valid items");
-  }
-
-  return generatedSeeds;
-}
-
-async function generateSeedsWithOllama({ refreshKey, query }) {
-  const model = process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL;
-  const baseUrl = (process.env.OLLAMA_BASE_URL || DEFAULT_OLLAMA_BASE_URL).replace(/\/$/, "");
-  const timeout = toPositiveInteger(process.env.FOCUS_REELS_LLM_TIMEOUT_MS, LLM_TIMEOUT_MS, 15000);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetch(`${baseUrl}/api/generate`, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model,
-        stream: false,
-        format: "json",
-        system: "You generate concise, high-signal learning feed cards. Return valid JSON only.",
-        prompt: makeOllamaPrompt({ limit: GENERATED_SEED_LIMIT, refreshKey }),
-        options: {
-          temperature: 0.88,
-          top_p: 0.9,
-          num_predict: 1400
-        }
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Ollama request failed: ${response.status}`);
-    }
-
-    const payload = await response.json();
-    return {
-      model,
-      provider: "ollama",
-      seeds: parseGeneratedSeeds(payload.response)
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function generateSeedsWithHuggingFace({ refreshKey }) {
-  if (!process.env.HF_TOKEN) {
-    throw new Error("HF_TOKEN is not configured");
-  }
-
-  const model = process.env.HF_MODEL || DEFAULT_HF_MODEL;
-  const timeout = toPositiveInteger(process.env.FOCUS_REELS_LLM_TIMEOUT_MS, LLM_TIMEOUT_MS, 15000);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetch(HF_CHAT_COMPLETIONS_URL, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model,
-        stream: false,
-        temperature: 0.82,
-        max_tokens: 1200,
-        messages: [
-          {
-            role: "system",
-            content: "You generate concise, high-signal learning feed cards. Return valid JSON only."
-          },
-          {
-            role: "user",
-            content: makeOllamaPrompt({ limit: GENERATED_SEED_LIMIT, refreshKey })
-          }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Hugging Face request failed: ${response.status}`);
-    }
-
-    const payload = await response.json();
-    const content = payload.choices?.[0]?.message?.content;
-    const responseText = Array.isArray(content)
-      ? content.map((part) => part.text || "").join("")
-      : content;
-
-    return {
-      model,
-      provider: "hf",
-      seeds: parseGeneratedSeeds(responseText)
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function generateSeedsWithProvider({ provider, refreshKey, query }) {
-  if (provider === "hf") {
-    return generateSeedsWithHuggingFace({ refreshKey });
-  }
-
-  if (provider === "ollama") {
-    return generateSeedsWithOllama({ refreshKey, query });
-  }
-
-  throw new Error("LLM provider is off");
-}
-
 function resolveInternetProvider(query = {}) {
   const requested = String(query.internet || process.env.FOCUS_REELS_INTERNET_REFRESH || "on").toLowerCase();
   return requested === "off" || requested === "false" ? "off" : "public";
 }
 
-async function fetchBookApiSeeds({ refreshKey, fetchImpl }) {
+function rotateValues(values, refreshKey, limit = values.length) {
+  const start = stableSalt(refreshKey) % values.length;
+  return Array.from({ length: Math.min(limit, values.length) }, (_, index) => values[(start + index) % values.length]);
+}
+
+function dedupeCards(cards) {
+  const seen = new Set();
+  return cards.filter((card) => {
+    const key = `${card.sourceGroup || ""}-${String(card.hook || card.title || "").toLowerCase()}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function computeLiveTargets(start, size) {
+  const contentSlots = Array.from({ length: size }, (_, offset) => start + offset)
+    .filter((sequence) => !(sequence > 0 && sequence % FOCUS_INTERVAL === 0)).length;
+  const tech = Math.round(contentSlots * 0.2);
+  const books = Math.round(contentSlots * 0.3);
+  return {
+    tech,
+    books,
+    news: Math.max(0, contentSlots - tech - books)
+  };
+}
+
+function buildGroupPlan(targets) {
+  const preferredOrder = ["news", "books", "tech", "news", "books", "news", "tech", "books", "news", "news"];
+  const used = { tech: 0, books: 0, news: 0 };
+  const total = targets.tech + targets.books + targets.news;
+  const plan = [];
+
+  for (let index = 0; index < total; index += 1) {
+    const preferred = preferredOrder[index % preferredOrder.length];
+    const candidates = Object.keys(targets).filter((group) => used[group] < targets[group]);
+    candidates.sort((left, right) => {
+      const ratio = used[left] / targets[left] - used[right] / targets[right];
+      if (ratio !== 0) {
+        return ratio;
+      }
+      if (left === preferred) {
+        return -1;
+      }
+      if (right === preferred) {
+        return 1;
+      }
+      return preferredOrder.indexOf(left) - preferredOrder.indexOf(right);
+    });
+    const group = candidates[0];
+    used[group] += 1;
+    plan.push(group);
+  }
+
+  return plan;
+}
+
+function fallbackSeedPool(group) {
+  if (group === "books") {
+    return seeds.filter((seed) => seed.category === "Book Summaries");
+  }
+  if (group === "tech") {
+    return seeds.filter((seed) => ["AI Agents", "Software Engineering", "Puzzles"].includes(seed.category));
+  }
+  return seeds.filter((seed) => ["Stock Market", "Product Thinking", "Travel"].includes(seed.category));
+}
+
+function makeFallbackCard(group, index, refreshKey) {
+  const pool = fallbackSeedPool(group);
+  const seed = pool[(stableSalt(`${refreshKey}-${group}`) + index) % pool.length];
+  const card = {
+    ...seed,
+    id: `fallback-${group}-${seed.id}-${index}`,
+    sourceGroup: SOURCE_GROUPS[group],
+    tags: [...(seed.tags || []), "offline-backfill"]
+  };
+
+  if (group === "books") {
+    return {
+      ...card,
+      type: "read",
+      category: "Book Summaries",
+      visual: "book",
+      art: "book",
+      body: buildBookSummaryBody({
+        title: card.title,
+        author: "Focus Reels library",
+        description: card.body,
+        subjects: card.tags || []
+      })
+    };
+  }
+
+  return card;
+}
+
+function fillGroup(cards, group, target, refreshKey) {
+  const filled = dedupeCards(cards).slice(0, target);
+  while (filled.length < target) {
+    filled.push(makeFallbackCard(group, filled.length, refreshKey));
+  }
+  return filled;
+}
+
+function withSequence(card, sequence, group, refreshKey) {
+  return {
+    ...card,
+    id: `${card.id || stableSalt(card.hook || card.title)}-${refreshKey ? stableSalt(refreshKey) : "live"}-${sequence}`,
+    sequence,
+    sourceGroup: card.sourceGroup || SOURCE_GROUPS[group]
+  };
+}
+
+async function fetchBookApiSeeds({ refreshKey, fetchImpl, target }) {
   const start = stableSalt(refreshKey) % bookRefreshQueries.length;
-  const selectedQueries = Array.from({ length: 3 }, (_, index) => bookRefreshQueries[(start + index) % bookRefreshQueries.length]);
+  const queryCount = Math.min(bookRefreshQueries.length, Math.max(5, Math.ceil(target / 4)));
+  const selectedQueries = Array.from({ length: queryCount }, (_, index) => bookRefreshQueries[(start + index) % bookRefreshQueries.length]);
   const results = await Promise.allSettled(selectedQueries.map(async (query, index) => {
     const url = new URL(GOOGLE_BOOKS_VOLUME_URL);
-    url.searchParams.set("q", `intitle:${query}`);
+    url.searchParams.set("q", query);
     url.searchParams.set("printType", "books");
-    url.searchParams.set("maxResults", "1");
+    url.searchParams.set("maxResults", "5");
 
     const payload = await fetchJson(url, { fetchImpl });
-    const volume = Array.isArray(payload.items) ? payload.items[0] : null;
-    return volume ? makeBookApiSeed(volume, query, index) : null;
+    const volumes = Array.isArray(payload.items) ? payload.items : [];
+    return volumes.map((volume, volumeIndex) => makeBookApiSeed(volume, query, index * 10 + volumeIndex));
   }));
 
-  return results
+  return dedupeCards(results
     .filter((result) => result.status === "fulfilled" && result.value)
-    .map((result) => result.value);
+    .flatMap((result) => result.value)
+    .filter(Boolean));
 }
 
 async function fetchHackerNewsSeeds({ fetchImpl }) {
   const ids = await fetchJson(`${HN_API_BASE_URL}/newstories.json`, { fetchImpl });
-  const selectedIds = Array.isArray(ids) ? ids.slice(0, 16) : [];
+  const selectedIds = Array.isArray(ids) ? ids.slice(0, 10) : [];
   const results = await Promise.allSettled(selectedIds.map((id) => {
     return fetchJson(`${HN_API_BASE_URL}/item/${id}.json`, {
       fetchImpl,
-      timeout: 2400
+      timeout: 2200
     });
   }));
 
@@ -624,82 +701,161 @@ async function fetchHackerNewsSeeds({ fetchImpl }) {
   });
   const selectedStories = (topicMatches.length >= 4 ? topicMatches : stories).slice(0, 8);
 
-  return selectedStories.map((story, index) => makeHackerNewsSeed(story, index));
+  return selectedStories.map((story, index) => makeTechTrendSeed(story, index, "hn"));
 }
 
-async function generateSeedsFromInternet({ refreshKey, fetchImpl = fetch }) {
+async function fetchNewsRssCards({ queries, fetchImpl, target, mapper, sourcePrefix }) {
   const results = await Promise.allSettled([
-    fetchBookApiSeeds({ refreshKey, fetchImpl }),
-    fetchHackerNewsSeeds({ fetchImpl })
+    ...queries.map(async (query, queryIndex) => {
+      const xml = await fetchText(buildGoogleNewsUrl(query), { fetchImpl });
+      return parseRssItems(xml).map((item, itemIndex) => mapper(item, queryIndex * 100 + itemIndex, sourcePrefix));
+    })
   ]);
-  const internetSeeds = results
+  return dedupeCards(results
     .filter((result) => result.status === "fulfilled")
     .flatMap((result) => result.value)
-    .filter(Boolean);
+    .filter(Boolean))
+    .slice(0, target);
+}
 
-  if (internetSeeds.length < 4) {
-    throw new Error("Internet refresh returned too few usable items");
-  }
+async function fetchTechSeeds({ fetchImpl, target }) {
+  const [newsResult, hnResult] = await Promise.allSettled([
+    fetchNewsRssCards({
+      queries: techNewsQueries,
+      fetchImpl,
+      target,
+      mapper: (item, index) => makeTechTrendSeed(item, index, "gnews-tech"),
+      sourcePrefix: "gnews-tech"
+    }),
+    fetchHackerNewsSeeds({ fetchImpl })
+  ]);
+  return dedupeCards([
+    ...(newsResult.status === "fulfilled" ? newsResult.value : []),
+    ...(hnResult.status === "fulfilled" ? hnResult.value : [])
+  ]).slice(0, target);
+}
+
+async function fetchMarketQuoteCards({ fetchImpl }) {
+  const url = new URL(STOOQ_QUOTES_URL);
+  url.searchParams.set("s", stooqSymbols.join(" "));
+  url.searchParams.set("f", "sd2t2ohlcv");
+  url.searchParams.set("h", "");
+  url.searchParams.set("e", "csv");
+
+  const csv = await fetchText(url, { fetchImpl, timeout: 2600 });
+  return parseCsvRows(csv)
+    .filter((row) => row.symbol && row.close && row.close !== "N/D")
+    .map((row, index) => makeMarketQuoteCard(row, index));
+}
+
+async function fetchNewsMarketSeeds({ fetchImpl, target }) {
+  const [rssResult, quoteResult] = await Promise.allSettled([
+    fetchNewsRssCards({
+      queries: hotNewsQueries,
+      fetchImpl,
+      target,
+      mapper: (item, index) => makeNewsCard(item, index),
+      sourcePrefix: "gnews-market"
+    }),
+    fetchMarketQuoteCards({ fetchImpl })
+  ]);
+  return dedupeCards([
+    ...(quoteResult.status === "fulfilled" ? quoteResult.value : []),
+    ...(rssResult.status === "fulfilled" ? rssResult.value : [])
+  ]).slice(0, target);
+}
+
+async function fetchLiveGroups({ refreshKey, fetchImpl, targets }) {
+  const results = await Promise.allSettled([
+    fetchTechSeeds({ fetchImpl, target: targets.tech }),
+    fetchBookApiSeeds({ refreshKey, fetchImpl, target: targets.books }),
+    fetchNewsMarketSeeds({ fetchImpl, target: targets.news })
+  ]);
+  const warnings = results
+    .filter((result) => result.status === "rejected")
+    .map((result) => result.reason?.message || "A live source failed");
 
   return {
-    provider: "internet",
-    model: "open-library+hacker-news",
-    seeds: internetSeeds
+    groups: {
+      tech: results[0].status === "fulfilled" ? results[0].value : [],
+      books: results[1].status === "fulfilled" ? results[1].value : [],
+      news: results[2].status === "fulfilled" ? results[2].value : []
+    },
+    warnings
   };
 }
 
-export async function makeRefreshedFeed({ cursor = 0, limit = DEFAULT_LIMIT, refreshKey = "", query = {}, allowLlm, llmProvider = resolveLlmProvider(query, allowLlm), internetProvider = resolveInternetProvider(query), fetchImpl = fetch } = {}) {
+async function makeLiveRefreshFeed({ cursor = 0, limit = DEFAULT_LIMIT, refreshKey = "", fetchImpl = fetch } = {}) {
+  const start = toPositiveInteger(cursor, 0, Number.MAX_SAFE_INTEGER);
+  const size = toPositiveInteger(limit, DEFAULT_LIMIT, MAX_LIMIT);
+  const targets = computeLiveTargets(start, size);
+  const { groups, warnings } = await fetchLiveGroups({ refreshKey, fetchImpl, targets });
+  const liveCount = groups.tech.length + groups.books.length + groups.news.length;
+
+  if (liveCount < Math.min(4, targets.tech + targets.books + targets.news)) {
+    throw new Error("Live refresh returned too few usable items");
+  }
+
+  const filledGroups = {
+    tech: fillGroup(groups.tech, "tech", targets.tech, refreshKey),
+    books: fillGroup(groups.books, "books", targets.books, refreshKey),
+    news: fillGroup(groups.news, "news", targets.news, refreshKey)
+  };
+  const plan = buildGroupPlan(targets);
+  const used = { tech: 0, books: 0, news: 0 };
+  const items = [];
+  let contentIndex = 0;
+
+  for (let offset = 0; offset < size; offset += 1) {
+    const sequence = start + offset;
+    if (sequence > 0 && sequence % FOCUS_INTERVAL === 0) {
+      items.push(makeFocusItem(sequence));
+      continue;
+    }
+
+    const group = plan[contentIndex];
+    const card = filledGroups[group][used[group]];
+    used[group] += 1;
+    contentIndex += 1;
+    items.push(withSequence(card, sequence, group, refreshKey));
+  }
+
+  return {
+    items,
+    nextCursor: start + size,
+    limit: size,
+    generatedAt: new Date().toISOString(),
+    focusInterval: FOCUS_INTERVAL,
+    source: "live refresh",
+    provider: "public-web",
+    sources: ["google-books", "google-news-rss", "hacker-news", "stooq"],
+    composition: {
+      [SOURCE_GROUPS.tech]: targets.tech,
+      [SOURCE_GROUPS.books]: targets.books,
+      [SOURCE_GROUPS.news]: targets.news
+    },
+    ...(warnings.length ? { warning: warnings.join("; ") } : {})
+  };
+}
+
+export async function makeRefreshedFeed({ cursor = 0, limit = DEFAULT_LIMIT, refreshKey = "", query = {}, internetProvider = resolveInternetProvider(query), fetchImpl = fetch } = {}) {
   const key = refreshKey || query.refreshKey || query.nonce || new Date().toISOString();
-  let refreshWarning = "";
 
   if (internetProvider !== "off") {
     try {
-      const generated = await generateSeedsFromInternet({ refreshKey: key, fetchImpl });
-      return {
-        ...makeFeed({
-          cursor,
-          limit,
-          refreshKey: `${key}-${generated.model}`,
-          seedPool: generated.seeds,
-          source: "internet"
-        }),
-        source: "internet refresh",
-        provider: generated.provider,
-        model: generated.model
-      };
-    } catch (error) {
-      refreshWarning = error.message;
-    }
-  }
-
-  if (llmProvider !== "off") {
-    try {
-      const generated = await generateSeedsWithProvider({ provider: llmProvider, refreshKey: key, query });
-      return {
-        ...makeFeed({
-          cursor,
-          limit,
-          refreshKey: `${key}-${generated.model}`,
-          seedPool: generated.seeds,
-          source: "llm"
-        }),
-        source: `small llm: ${generated.model}`,
-        provider: generated.provider,
-        model: generated.model
-      };
+      return await makeLiveRefreshFeed({ cursor, limit, refreshKey: key, fetchImpl });
     } catch (error) {
       return {
         ...makeFeed({ cursor, limit, refreshKey: key, source: "remix" }),
         source: "fresh remix",
-        warning: refreshWarning ? `${refreshWarning}; ${error.message}` : error.message
+        warning: error.message
       };
     }
   }
 
   return {
     ...makeFeed({ cursor, limit, refreshKey: key, source: "remix" }),
-    source: "fresh remix",
-    ...(refreshWarning ? { warning: refreshWarning } : {})
+    source: "fresh remix"
   };
 }
 

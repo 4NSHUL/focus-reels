@@ -307,7 +307,7 @@ class FocusReelsApp extends HTMLElement {
     this.updateHud();
 
     try {
-      const response = await fetch(`/api/feed?cursor=0&limit=${BATCH_SIZE}&refresh=1&llm=auto&refreshKey=${encodeURIComponent(refreshKey)}`, {
+      const response = await fetch(`/api/feed?cursor=0&limit=${BATCH_SIZE}&refresh=1&refreshKey=${encodeURIComponent(refreshKey)}`, {
         cache: "no-store"
       });
 
