@@ -1,0 +1,17 @@
+{
+  "name": "Focus Reels",
+  "short_name": "FocusReels",
+  "description": "Healthy reels for AI agents, software engineering, puzzles, books, travel, and markets.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050506",
+  "theme_color": "#050506",
+  "icons": [
+    {
+      "src": "/assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

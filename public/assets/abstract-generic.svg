@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-label="Abstract layered geometry">
+  <rect width="640" height="640" rx="56" fill="#0b0c0d"/>
+  <path d="M92 472 208 168l166 250 84-140 90 194z" fill="#34d399" opacity=".68"/>
+  <path d="M124 206h396v54H124zM164 300h318v34H164zM204 380h240v28H204z" fill="#f8f5ef" opacity=".18"/>
+  <path d="M116 488c82-76 158-98 230-66 68 30 124 18 180-38" fill="none" stroke="#ff5a5f" stroke-width="28" stroke-linecap="round"/>
+  <path d="M136 132h118v118H136zM398 106h84v84h-84zM438 422h88v88h-88z" fill="none" stroke="#ffd166" stroke-width="18"/>
+</svg>

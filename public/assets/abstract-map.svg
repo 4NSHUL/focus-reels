@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-label="Abstract travel map">
+  <rect width="640" height="640" rx="56" fill="#071015"/>
+  <path d="M118 172 254 116l132 56 136-56v352l-136 56-132-56-136 56z" fill="#f8f5ef" opacity=".12"/>
+  <path d="M254 116v352M386 172v352" stroke="#65d6ff" stroke-width="16" opacity=".72"/>
+  <path d="M152 430c70-108 150-134 240-78 58 36 100 18 126-54" fill="none" stroke="#34d399" stroke-width="24" stroke-linecap="round"/>
+  <path d="M190 230h60M420 230h72M188 314h132M430 414h52" stroke="#ffd166" stroke-width="18" stroke-linecap="round"/>
+  <path d="M330 250l52-112 52 112c-34-18-70-18-104 0z" fill="#ff5a5f"/>
+</svg>

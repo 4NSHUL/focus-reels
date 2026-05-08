@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Focus Reels icon</title>
+  <rect width="512" height="512" rx="96" fill="#050506"/>
+  <path d="M136 134h240v70H206v70h136v66H206v98h-70z" fill="#f8f5ef"/>
+  <path d="M310 232h86v206h-86z" fill="#34d399"/>
+  <path d="M336 86l104 82-104 82z" fill="#ff5a5f"/>
+  <circle cx="382" cy="374" r="34" fill="#ffd166"/>
+</svg>

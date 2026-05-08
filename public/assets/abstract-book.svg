@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-label="Abstract open book">
+  <rect width="640" height="640" rx="56" fill="#16130d"/>
+  <path d="M104 148c78-28 148-18 216 30v330c-68-48-138-58-216-30z" fill="#f8f5ef" opacity=".88"/>
+  <path d="M320 178c68-48 138-58 216-30v330c-78-28-148-18-216 30z" fill="#f8f5ef" opacity=".22"/>
+  <path d="M154 230h116M154 286h118M154 342h92M370 230h116M370 286h92M370 342h118" stroke="#0b0c0d" stroke-width="18" stroke-linecap="round" opacity=".7"/>
+  <path d="M320 178v330" stroke="#ffd166" stroke-width="18" stroke-linecap="round"/>
+  <path d="M122 520c72-24 138-16 198 24 62-40 128-48 198-24" fill="none" stroke="#34d399" stroke-width="18" stroke-linecap="round"/>
+</svg>

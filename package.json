@@ -1,0 +1,14 @@
+{
+  "name": "focus-reels",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline-first healthy reels game for software engineering, AI agents, puzzles, books, travel, and markets.",
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

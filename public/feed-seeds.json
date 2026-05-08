@@ -1,0 +1,577 @@
+[
+  {
+    "id": "agent-tool-boundary",
+    "type": "quiz",
+    "category": "AI Agents",
+    "visual": "agent",
+    "art": "nodes",
+    "difficulty": "medium",
+    "title": "Tool Boundary Drill",
+    "hook": "Your agent can send email, update Jira, and call a billing API.",
+    "body": "A user asks it to cancel an invoice. What should happen before the tool call?",
+    "choices": [
+      "Run the billing action because the user requested it.",
+      "Confirm intent, check policy, and require a clear approval step.",
+      "Disable every external tool for all future tasks."
+    ],
+    "answerIndex": 1,
+    "explanation": "High-impact tools need confirmation and policy checks before execution.",
+    "xp": 16,
+    "tags": ["agents", "safety", "tools"]
+  },
+  {
+    "id": "agent-memory-scope",
+    "type": "quiz",
+    "category": "AI Agents",
+    "visual": "agent",
+    "art": "mind",
+    "difficulty": "easy",
+    "title": "Memory Scope Check",
+    "hook": "An assistant remembers a user's cloud region preference.",
+    "body": "Which memory is safest to keep long term?",
+    "choices": [
+      "A reusable preference like preferred region naming style.",
+      "A copied access token from the last terminal session.",
+      "Every debug log from the user's laptop."
+    ],
+    "answerIndex": 0,
+    "explanation": "Durable preferences are useful; secrets and noisy logs should not become long-term memory.",
+    "xp": 12,
+    "tags": ["agents", "memory"]
+  },
+  {
+    "id": "agent-eval-loop",
+    "type": "quiz",
+    "category": "AI Agents",
+    "visual": "agent",
+    "art": "nodes",
+    "difficulty": "medium",
+    "title": "Eval Loop Sprint",
+    "hook": "Your support agent sounds good in demos but fails edge cases.",
+    "body": "What gives the most reliable signal before release?",
+    "choices": [
+      "A single perfect demo prompt.",
+      "A scored eval set with realistic failures and regression checks.",
+      "A prettier loading animation."
+    ],
+    "answerIndex": 1,
+    "explanation": "Evals turn vague quality into repeatable release gates.",
+    "xp": 16,
+    "tags": ["agents", "evals"]
+  },
+  {
+    "id": "agent-context-window-read",
+    "type": "read",
+    "category": "AI Agents",
+    "visual": "agent",
+    "art": "mind",
+    "difficulty": "quick read",
+    "title": "Context Window Habit",
+    "hook": "A smarter agent is not just a bigger prompt.",
+    "body": "The useful habit is deciding what deserves to enter context, what can stay in memory, and what should be retrieved only when needed.",
+    "points": [
+      "Keep current task state close.",
+      "Retrieve source facts late, near the decision.",
+      "Do not carry stale logs forward when the problem has changed."
+    ],
+    "reflection": "Before adding more context, ask what decision the model is about to make.",
+    "xp": 9,
+    "tags": ["agents", "context", "memory"]
+  },
+  {
+    "id": "software-idempotency",
+    "type": "quiz",
+    "category": "Software Engineering",
+    "visual": "code",
+    "art": "codeflow",
+    "difficulty": "medium",
+    "title": "Idempotency Reflex",
+    "hook": "A payment callback may retry three times during an outage.",
+    "body": "What design prevents duplicate charges?",
+    "choices": [
+      "Add a retry loop inside the callback handler.",
+      "Use an idempotency key and persist the processed event result.",
+      "Trust the network to deliver the callback once."
+    ],
+    "answerIndex": 1,
+    "explanation": "Persisted idempotency makes retries safe and predictable.",
+    "xp": 16,
+    "tags": ["backend", "reliability"]
+  },
+  {
+    "id": "software-observability",
+    "type": "quiz",
+    "category": "Software Engineering",
+    "visual": "code",
+    "art": "codeflow",
+    "difficulty": "easy",
+    "title": "Debug Signal Picker",
+    "hook": "A scheduled job fails only in production.",
+    "body": "Which log line is most useful?",
+    "choices": [
+      "Started job.",
+      "Job failed.",
+      "Job failed with job_id, dependency, sanitized config source, and error code."
+    ],
+    "answerIndex": 2,
+    "explanation": "Good logs carry the state needed to separate config, code, and dependency failures.",
+    "xp": 12,
+    "tags": ["observability", "debugging"]
+  },
+  {
+    "id": "software-api-contract",
+    "type": "quiz",
+    "category": "Software Engineering",
+    "visual": "code",
+    "art": "codeflow",
+    "difficulty": "medium",
+    "title": "API Contract Move",
+    "hook": "A mobile app depends on your response field named status.",
+    "body": "You need to split status into state and reason. What is safest?",
+    "choices": [
+      "Remove status immediately and update docs later.",
+      "Add state and reason while keeping status through a deprecation window.",
+      "Return different fields based on the user's device."
+    ],
+    "answerIndex": 1,
+    "explanation": "Additive contracts reduce client breakage while allowing migration.",
+    "xp": 16,
+    "tags": ["api", "compatibility"]
+  },
+  {
+    "id": "software-good-pr-read",
+    "type": "read",
+    "category": "Software Engineering",
+    "visual": "code",
+    "art": "codeflow",
+    "difficulty": "quick read",
+    "title": "Good PR Shape",
+    "hook": "A clean PR should reduce reviewer guessing.",
+    "body": "The best small PRs show the behavior change, the reason, and the proof. Reviewers should not need to reverse-engineer your intent from diffs alone.",
+    "points": [
+      "Keep unrelated refactors out.",
+      "Name the risk the change reduces.",
+      "Include the smallest test that proves the contract."
+    ],
+    "reflection": "A good PR is not smaller because it hides work; it is smaller because it contains one coherent decision.",
+    "xp": 9,
+    "tags": ["review", "testing", "engineering"]
+  },
+  {
+    "id": "puzzle-cache-key",
+    "type": "quiz",
+    "category": "Puzzles",
+    "visual": "puzzle",
+    "art": "mind",
+    "difficulty": "hard",
+    "title": "Cache Key Puzzle",
+    "hook": "Two users request /report?month=May. One is admin, one is viewer.",
+    "body": "What must be part of the cache key?",
+    "choices": [
+      "Only the URL path.",
+      "The month, role or permission scope, and any tenant boundary.",
+      "The browser window size."
+    ],
+    "answerIndex": 1,
+    "explanation": "Authorization context belongs in cache keys when data visibility changes by user.",
+    "xp": 20,
+    "tags": ["security", "caching"]
+  },
+  {
+    "id": "puzzle-race-condition",
+    "type": "quiz",
+    "category": "Puzzles",
+    "visual": "puzzle",
+    "art": "mind",
+    "difficulty": "hard",
+    "title": "Race Condition Spotter",
+    "hook": "Two workers read stock=1 at the same time, then both decrement.",
+    "body": "What prevents selling below zero?",
+    "choices": [
+      "A bigger instance.",
+      "An atomic update or transaction with a stock > 0 condition.",
+      "A faster frontend spinner."
+    ],
+    "answerIndex": 1,
+    "explanation": "The invariant must live where concurrent writes are serialized.",
+    "xp": 20,
+    "tags": ["concurrency", "databases"]
+  },
+  {
+    "id": "puzzle-binary-search",
+    "type": "quiz",
+    "category": "Puzzles",
+    "visual": "puzzle",
+    "art": "mind",
+    "difficulty": "easy",
+    "title": "Binary Search Snap",
+    "hook": "You need to find the first bad build among 1024 builds.",
+    "body": "About how many checks do you need with binary search?",
+    "choices": ["10", "128", "512"],
+    "answerIndex": 0,
+    "explanation": "2 to the power of 10 is 1024, so ten splits isolate the first bad build.",
+    "xp": 12,
+    "tags": ["algorithms", "debugging"]
+  },
+  {
+    "id": "puzzle-invariant-read",
+    "type": "read",
+    "category": "Puzzles",
+    "visual": "puzzle",
+    "art": "mind",
+    "difficulty": "quick read",
+    "title": "Invariant Lens",
+    "hook": "Many hard bugs become smaller when you name what must never change.",
+    "body": "An invariant is a rule that should survive retries, concurrency, partial failure, and messy inputs.",
+    "points": [
+      "Balances never go below zero.",
+      "A paid order is fulfilled once.",
+      "A user sees only their tenant's data."
+    ],
+    "reflection": "When stuck, write the invariant before writing the fix.",
+    "xp": 9,
+    "tags": ["puzzles", "invariants"]
+  },
+  {
+    "id": "book-power-now",
+    "type": "read",
+    "category": "Book Summaries",
+    "visual": "book",
+    "art": "book",
+    "difficulty": "easy",
+    "title": "The Power of Now",
+    "hook": "One useful idea: attention is a trainable skill.",
+    "body": "A practical reading: notice when thought pulls you into replay or prediction, then return to the task, breath, or body signal in front of you.",
+    "points": [
+      "Notice the mental loop without fighting it.",
+      "Return to one concrete signal in the present.",
+      "Then choose the next action deliberately."
+    ],
+    "reflection": "Use this as a ten-second reset before deep work.",
+    "choices": [
+      "Take one slow breath before the next reel.",
+      "Open three more tabs.",
+      "Ignore the body signal."
+    ],
+    "answerIndex": 0,
+    "explanation": "The point is not passivity; it is reducing mental noise so action becomes cleaner.",
+    "xp": 10,
+    "tags": ["books", "attention"]
+  },
+  {
+    "id": "book-deep-work",
+    "type": "read",
+    "category": "Book Summaries",
+    "visual": "book",
+    "art": "book",
+    "difficulty": "easy",
+    "title": "Deep Work",
+    "hook": "One useful idea: focus is economic leverage.",
+    "body": "Protect blocks where hard thinking is the default, not the exception. Shallow tasks still matter, but they should not own your best attention.",
+    "points": [
+      "Put hard work where your energy is highest.",
+      "Batch shallow work instead of letting it leak everywhere.",
+      "End sessions with a visible next step."
+    ],
+    "reflection": "A protected hour can beat a distracted afternoon.",
+    "choices": [
+      "Block one focused work window today.",
+      "Keep notifications open during hard work.",
+      "Start with the easiest inbox item only."
+    ],
+    "answerIndex": 0,
+    "explanation": "The habit improves output quality because complex work needs uninterrupted context.",
+    "xp": 10,
+    "tags": ["books", "focus"]
+  },
+  {
+    "id": "book-atomic-habits",
+    "type": "read",
+    "category": "Book Summaries",
+    "visual": "book",
+    "art": "book",
+    "difficulty": "easy",
+    "title": "Atomic Habits",
+    "hook": "One useful idea: design beats willpower.",
+    "body": "Make good actions visible and easy, and make bad loops slightly harder. Tiny defaults compound when repeated.",
+    "points": [
+      "Reduce friction for the habit you want.",
+      "Increase friction for the loop you regret.",
+      "Track the action, not the identity story."
+    ],
+    "reflection": "Better defaults save willpower for real decisions.",
+    "choices": [
+      "Move one distraction one step farther away.",
+      "Depend on motivation only.",
+      "Track nothing and hope."
+    ],
+    "answerIndex": 0,
+    "explanation": "Environment design reduces the number of decisions needed to do the right thing.",
+    "xp": 10,
+    "tags": ["books", "habits"]
+  },
+  {
+    "id": "book-psychology-money",
+    "type": "read",
+    "category": "Book Summaries",
+    "visual": "book",
+    "art": "market",
+    "difficulty": "easy",
+    "title": "The Psychology of Money",
+    "hook": "One useful idea: behavior often beats intelligence.",
+    "body": "A good financial system survives fear, greed, and surprise. Room for error is not weakness; it is how plans stay alive.",
+    "points": [
+      "Avoid plans that only work in perfect markets.",
+      "Keep margin for surprise.",
+      "Measure decisions by process, not one outcome."
+    ],
+    "reflection": "Survival is a strategy, not a boring fallback.",
+    "choices": [
+      "Leave margin before increasing risk.",
+      "Assume every forecast is certain.",
+      "Measure success only by one lucky trade."
+    ],
+    "answerIndex": 0,
+    "explanation": "Durable investing rewards survival and consistency, not just cleverness.",
+    "xp": 10,
+    "tags": ["books", "money"]
+  },
+  {
+    "id": "travel-itinerary-constraint",
+    "type": "quiz",
+    "category": "Travel",
+    "visual": "travel",
+    "art": "map",
+    "difficulty": "easy",
+    "title": "Trip Planner Constraint",
+    "hook": "You have one day in Tokyo and want food, temples, shopping, and quiet time.",
+    "body": "What is the best first planning move?",
+    "choices": [
+      "Add ten neighborhoods and hope transit works.",
+      "Pick one anchor area and cluster nearby activities.",
+      "Skip meals to save time."
+    ],
+    "answerIndex": 1,
+    "explanation": "Clustering reduces transit drag and makes the day feel richer.",
+    "xp": 12,
+    "tags": ["travel", "planning"]
+  },
+  {
+    "id": "travel-system-design",
+    "type": "quiz",
+    "category": "Travel",
+    "visual": "travel",
+    "art": "map",
+    "difficulty": "medium",
+    "title": "Travel App Design",
+    "hook": "A travel app must work when the user loses data service abroad.",
+    "body": "What should the app cache before the trip?",
+    "choices": [
+      "Only the marketing homepage.",
+      "Reservations, maps, emergency info, and key itinerary details.",
+      "Nothing, because offline mode is rare."
+    ],
+    "answerIndex": 1,
+    "explanation": "Offline access protects the highest-stress moments of travel.",
+    "xp": 16,
+    "tags": ["travel", "offline"]
+  },
+  {
+    "id": "travel-slow-day-read",
+    "type": "read",
+    "category": "Travel",
+    "visual": "travel",
+    "art": "map",
+    "difficulty": "quick read",
+    "title": "Slow Travel Rule",
+    "hook": "A great trip is not measured by how many pins you visited.",
+    "body": "Leave enough empty space that a cafe, side street, or local conversation can become the point of the day.",
+    "points": [
+      "Choose one anchor activity.",
+      "Cluster nearby options.",
+      "Protect one unscheduled window."
+    ],
+    "reflection": "The same rule works for learning: leave room to connect ideas.",
+    "xp": 8,
+    "tags": ["travel", "planning"]
+  },
+  {
+    "id": "market-position-sizing",
+    "type": "quiz",
+    "category": "Stock Market",
+    "visual": "market",
+    "art": "market",
+    "difficulty": "medium",
+    "title": "Position Size Drill",
+    "hook": "A trade idea looks strong, but earnings are tomorrow.",
+    "body": "What is the healthiest action?",
+    "choices": [
+      "Go all in because conviction is high.",
+      "Size the trade so being wrong does not damage the plan.",
+      "Borrow money to increase upside."
+    ],
+    "answerIndex": 1,
+    "explanation": "Position sizing controls downside when uncertainty rises.",
+    "xp": 16,
+    "tags": ["markets", "risk"]
+  },
+  {
+    "id": "market-news-reaction",
+    "type": "quiz",
+    "category": "Stock Market",
+    "visual": "market",
+    "art": "market",
+    "difficulty": "medium",
+    "title": "News Reaction Filter",
+    "hook": "A stock jumps after a headline. Social media is euphoric.",
+    "body": "What question matters before acting?",
+    "choices": [
+      "Is the headline exciting?",
+      "Does the news change cash flows, risk, or time horizon?",
+      "How many rocket comments are there?"
+    ],
+    "answerIndex": 1,
+    "explanation": "Price action is noisy; decision quality improves when tied to fundamentals and risk.",
+    "xp": 16,
+    "tags": ["markets", "analysis"]
+  },
+  {
+    "id": "market-journal-read",
+    "type": "read",
+    "category": "Stock Market",
+    "visual": "market",
+    "art": "market",
+    "difficulty": "quick read",
+    "title": "Trading Journal Edge",
+    "hook": "The journal is where dopamine becomes data.",
+    "body": "Write the setup, invalidation point, position size, and emotional state before entering. The pattern you review later is often more valuable than the trade.",
+    "points": [
+      "What would prove this idea wrong?",
+      "How much can I lose and still think clearly?",
+      "Did I follow my own rule?"
+    ],
+    "reflection": "A journal turns scattered wins and losses into a feedback loop.",
+    "xp": 9,
+    "tags": ["markets", "risk", "journaling"]
+  },
+  {
+    "id": "systems-backpressure",
+    "type": "quiz",
+    "category": "Systems",
+    "visual": "systems",
+    "art": "codeflow",
+    "difficulty": "hard",
+    "title": "Backpressure Reflex",
+    "hook": "Your queue grows faster than workers can process messages.",
+    "body": "What is the best first system response?",
+    "choices": [
+      "Accept unlimited writes forever.",
+      "Apply rate limits, shed low-priority work, and scale workers with clear bounds.",
+      "Hide queue depth from dashboards."
+    ],
+    "answerIndex": 1,
+    "explanation": "Backpressure keeps overload from becoming a full system failure.",
+    "xp": 20,
+    "tags": ["systems", "queues"]
+  },
+  {
+    "id": "systems-circuit-breaker",
+    "type": "quiz",
+    "category": "Systems",
+    "visual": "systems",
+    "art": "codeflow",
+    "difficulty": "medium",
+    "title": "Circuit Breaker Move",
+    "hook": "A dependency times out for 30 seconds and every request waits.",
+    "body": "What pattern protects your service?",
+    "choices": [
+      "Keep retrying without limits.",
+      "Use timeouts, circuit breaking, and a fallback path.",
+      "Increase the loading spinner duration."
+    ],
+    "answerIndex": 1,
+    "explanation": "Circuit breakers stop one dependency failure from consuming all capacity.",
+    "xp": 16,
+    "tags": ["systems", "resilience"]
+  },
+  {
+    "id": "career-pr-review",
+    "type": "quiz",
+    "category": "Career",
+    "visual": "career",
+    "art": "generic",
+    "difficulty": "easy",
+    "title": "Senior PR Review",
+    "hook": "A PR rewrites a module and fixes a small bug.",
+    "body": "What should a strong reviewer ask first?",
+    "choices": [
+      "What changed, why, what risk moved, and what tests prove it?",
+      "Can we rename every variable?",
+      "Why was this not perfect on the first try?"
+    ],
+    "answerIndex": 0,
+    "explanation": "Good review focuses on behavior, risk, and evidence.",
+    "xp": 12,
+    "tags": ["career", "review"]
+  },
+  {
+    "id": "career-debug-ownership",
+    "type": "quiz",
+    "category": "Career",
+    "visual": "career",
+    "art": "mind",
+    "difficulty": "medium",
+    "title": "Debug Ownership",
+    "hook": "Production is broken and the first theory is wrong.",
+    "body": "What behavior earns trust?",
+    "choices": [
+      "Keep defending the first theory.",
+      "Follow evidence across boundaries and update the theory quickly.",
+      "Wait for another team to prove everything."
+    ],
+    "answerIndex": 1,
+    "explanation": "Strong debugging is evidence-led and crosses ownership boundaries when needed.",
+    "xp": 16,
+    "tags": ["career", "debugging"]
+  },
+  {
+    "id": "security-secret-handling",
+    "type": "quiz",
+    "category": "Security",
+    "visual": "security",
+    "art": "nodes",
+    "difficulty": "medium",
+    "title": "Secret Handling",
+    "hook": "A teammate suggests putting an API key in frontend JavaScript.",
+    "body": "What is the safer design?",
+    "choices": [
+      "Ship the key and obfuscate the variable name.",
+      "Keep the key server-side and expose only a scoped backend route.",
+      "Put the key in a comment so it is easy to find."
+    ],
+    "answerIndex": 1,
+    "explanation": "Browser code is inspectable; secrets belong on trusted server boundaries.",
+    "xp": 16,
+    "tags": ["security", "frontend"]
+  },
+  {
+    "id": "product-user-loop",
+    "type": "quiz",
+    "category": "Product Thinking",
+    "visual": "product",
+    "art": "generic",
+    "difficulty": "easy",
+    "title": "Feature Loop",
+    "hook": "Users ask for a dashboard with twenty charts.",
+    "body": "What question should shape the first version?",
+    "choices": [
+      "Which decision should this dashboard make easier?",
+      "How many colors can fit on screen?",
+      "Can every metric be visible at once?"
+    ],
+    "answerIndex": 0,
+    "explanation": "Products improve when UI starts from user decisions, not chart inventory.",
+    "xp": 12,
+    "tags": ["product", "ux"]
+  }
+]

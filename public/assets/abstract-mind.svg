@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-label="Abstract thinking paths">
+  <rect width="640" height="640" rx="56" fill="#17120d"/>
+  <path d="M156 470V226c0-54 44-98 98-98h132c54 0 98 44 98 98v244" fill="none" stroke="#f8f5ef" stroke-width="28" stroke-linecap="round"/>
+  <path d="M236 214h168M216 306h208M246 398h148" stroke="#ffd166" stroke-width="22" stroke-linecap="round"/>
+  <path d="M158 476h324M206 530h230" stroke="#34d399" stroke-width="18" stroke-linecap="round"/>
+  <path d="M154 312c-42 12-62 38-62 78 0 48 36 84 90 84M486 312c42 12 62 38 62 78 0 48-36 84-90 84" fill="none" stroke="#ff5a5f" stroke-width="18" stroke-linecap="round"/>
+</svg>

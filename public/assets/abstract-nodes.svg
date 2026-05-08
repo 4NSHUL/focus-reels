@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-label="Abstract connected nodes">
+  <rect width="640" height="640" rx="56" fill="#07100c"/>
+  <path d="M138 176h136v136H138zM364 118h126v126H364zM342 380h160v160H342zM116 418h116v116H116z" fill="#10261c" stroke="#34d399" stroke-width="16"/>
+  <path d="M274 244 364 181M246 312l112 98M232 470h110M426 244l-4 136" fill="none" stroke="#65d6ff" stroke-width="16" stroke-linecap="round"/>
+  <path d="M184 224h44M410 166h34M394 438h58M152 464h42" stroke="#f8f5ef" stroke-width="18" stroke-linecap="round"/>
+  <path d="M94 96h452v448H94z" fill="none" stroke="#f8f5ef" stroke-width="6" opacity=".18"/>
+</svg>

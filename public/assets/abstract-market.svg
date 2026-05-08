@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-label="Abstract market chart">
+  <rect width="640" height="640" rx="56" fill="#151108"/>
+  <path d="M102 500h436M138 424h42M218 348h42M298 392h42M378 260h42M458 188h42" stroke="#f8f5ef" stroke-width="20" stroke-linecap="round" opacity=".26"/>
+  <path d="M146 422 238 346l80 44 82-132 84-70" fill="none" stroke="#34d399" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M132 234h84v250h-84zM278 286h84v198h-84zM424 150h84v334h-84z" fill="#ff9f1c" opacity=".4"/>
+  <path d="M486 188h-78M486 188v78" stroke="#ffd166" stroke-width="22" stroke-linecap="round"/>
+</svg>
