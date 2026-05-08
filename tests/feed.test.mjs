@@ -58,7 +58,8 @@ test("refresh remix returns a fresh 100-item compatible feed without an llm", as
     cursor: 0,
     limit: 24,
     refreshKey: "fresh-local-test",
-    allowLlm: false
+    allowLlm: false,
+    query: { internet: "off" }
   });
 
   assert.equal(refreshed.items.length, 24);
@@ -75,7 +76,8 @@ test("refresh remix keeps focus checkpoints in long batches", async () => {
     cursor: 0,
     limit: 40,
     refreshKey: "focus-refresh-test",
-    allowLlm: false
+    allowLlm: false,
+    query: { internet: "off" }
   });
 
   const focusItems = refreshed.items.filter((item) => item.type === "focus");
@@ -94,7 +96,7 @@ test("vercel refresh falls back when no hosted llm token is configured", async (
       cursor: 0,
       limit: 12,
       refreshKey: "vercel-no-token",
-      query: { llm: "auto" }
+      query: { llm: "auto", internet: "off" }
     });
 
     assert.equal(refreshed.items.length, 12);
@@ -113,4 +115,67 @@ test("vercel refresh falls back when no hosted llm token is configured", async (
       process.env.HF_TOKEN = originalToken;
     }
   }
+});
+
+test("internet refresh builds book and interview trend cards from public APIs", async () => {
+  const fakeFetch = async (url) => {
+    const value = String(url);
+
+    if (value.includes("googleapis.com/books")) {
+      return {
+        ok: true,
+        json: async () => ({
+          items: [
+            {
+              volumeInfo: {
+                title: "Deep Work",
+                authors: ["Cal Newport"],
+                publishedDate: "2016-01-05",
+                description: "Deep work is the ability to focus without distraction on a cognitively demanding task.",
+                categories: ["Attention", "Productivity", "Work"],
+                previewLink: "https://example.com/deep-work"
+              }
+            }
+          ]
+        })
+      };
+    }
+
+    if (value.endsWith("/newstories.json")) {
+      return {
+        ok: true,
+        json: async () => [101, 102, 103, 104]
+      };
+    }
+
+    const id = Number(value.match(/item\/(\d+)\.json/)?.[1]);
+    const stories = {
+      101: { id: 101, type: "story", title: "AI agents are changing code review", url: "https://example.com/agents" },
+      102: { id: 102, type: "story", title: "Database cache outage postmortem", url: "https://example.com/cache" },
+      103: { id: 103, type: "story", title: "Graph algorithm puzzle for interviews", url: "https://example.com/graph" },
+      104: { id: 104, type: "story", title: "Stock market risk models explained", url: "https://example.com/market" }
+    };
+
+    return {
+      ok: true,
+      json: async () => stories[id]
+    };
+  };
+
+  const refreshed = await makeRefreshedFeed({
+    cursor: 0,
+    limit: 18,
+    refreshKey: "internet-refresh-test",
+    allowLlm: false,
+    query: { internet: "on" },
+    fetchImpl: fakeFetch
+  });
+  const categories = new Set(refreshed.items.map((item) => item.category));
+
+  assert.equal(refreshed.items.length, 18);
+  assert.equal(refreshed.source, "internet refresh");
+  assert.ok(categories.has("Book Summaries"));
+  assert.ok(categories.has("AI Agents"));
+  assert.ok(categories.has("Software Engineering"));
+  assert.ok(refreshed.items.some((item) => item.hook.includes("AI agents")));
 });

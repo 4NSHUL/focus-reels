@@ -15,6 +15,9 @@ const DEFAULT_HF_MODEL = "HuggingFaceTB/SmolLM2-135M-Instruct";
 const HF_CHAT_COMPLETIONS_URL = "https://router.huggingface.co/v1/chat/completions";
 const GENERATED_SEED_LIMIT = 6;
 const LLM_TIMEOUT_MS = 4500;
+const INTERNET_TIMEOUT_MS = 3800;
+const GOOGLE_BOOKS_VOLUME_URL = "https://www.googleapis.com/books/v1/volumes";
+const HN_API_BASE_URL = "https://hacker-news.firebaseio.com/v0";
 const categories = [
   "AI Agents",
   "Software Engineering",
@@ -27,6 +30,91 @@ const categories = [
 ];
 const visuals = ["agent", "code", "puzzle", "book", "travel", "market", "systems", "security", "career", "product", "focus"];
 const arts = ["book", "codeflow", "generic", "map", "market", "mind", "nodes"];
+const bookRefreshQueries = [
+  "The Power of Now",
+  "Deep Work",
+  "Atomic Habits",
+  "The Psychology of Money",
+  "Designing Data-Intensive Applications",
+  "The Pragmatic Programmer"
+];
+const trendTopics = [
+  {
+    category: "AI Agents",
+    visual: "agent",
+    art: "nodes",
+    label: "Agent Interview Drill",
+    keywords: ["agent", "agents", "llm", "ai", "model", "prompt", "openai", "claude", "chatgpt"],
+    question: (title) => `Interview question: how would you evaluate and safely ship an agent feature related to "${title}"?`,
+    choices: [
+      "Define success metrics, failure modes, eval cases, guardrails, and rollback.",
+      "Ship it after one demo if the answer sounds fluent.",
+      "Hide every tool call so users cannot interrupt the agent."
+    ],
+    explanation: "Agent interviews reward concrete evals, safety boundaries, and operational rollback plans.",
+    tags: ["agents", "interview", "evals"]
+  },
+  {
+    category: "Software Engineering",
+    visual: "code",
+    art: "codeflow",
+    label: "System Design Trend",
+    keywords: ["database", "api", "cache", "cloud", "kubernetes", "rust", "python", "javascript", "architecture", "scaling", "distributed", "security", "postgres", "server"],
+    question: (title) => `Interview question: what system-design tradeoffs matter first if a product includes "${title}"?`,
+    choices: [
+      "Start with constraints, data model, failure modes, and observability.",
+      "Pick the newest framework before naming the bottleneck.",
+      "Assume one server and no retries will be enough forever."
+    ],
+    explanation: "Good design answers start from constraints and failure modes before implementation details.",
+    tags: ["system-design", "interview"]
+  },
+  {
+    category: "Puzzles",
+    visual: "puzzle",
+    art: "mind",
+    label: "Puzzle Pattern",
+    keywords: ["algorithm", "math", "puzzle", "leetcode", "problem", "optimization", "graph", "tree", "array"],
+    question: (title) => `Interview question: which invariant or search strategy would simplify a problem like "${title}"?`,
+    choices: [
+      "Name the invariant, then choose brute force, binary search, graph search, or DP deliberately.",
+      "Start coding before knowing the input limits.",
+      "Only memorize the final answer."
+    ],
+    explanation: "Algorithm interviews become clearer when you name invariants and constraints first.",
+    tags: ["algorithms", "puzzles"]
+  },
+  {
+    category: "Stock Market",
+    visual: "market",
+    art: "market",
+    label: "Market Judgment",
+    keywords: ["stock", "market", "invest", "trading", "finance", "inflation", "rate", "earnings", "economy"],
+    question: (title) => `Judgment drill: what process question should you ask before reacting to "${title}"?`,
+    choices: [
+      "Ask what changed, what is priced in, and what would prove the thesis wrong.",
+      "Treat the headline as a buy or sell signal by itself.",
+      "Ignore position sizing and downside."
+    ],
+    explanation: "Market learning should build process and risk judgment, not impulsive advice.",
+    tags: ["markets", "risk"]
+  },
+  {
+    category: "Travel",
+    visual: "travel",
+    art: "map",
+    label: "Travel Systems",
+    keywords: ["travel", "flight", "visa", "map", "city", "hotel", "train", "airport"],
+    question: (title) => `Product question: what would a resilient travel app need for a situation like "${title}"?`,
+    choices: [
+      "Offline access, recovery paths, clear timing, and local context.",
+      "Only a beautiful landing page.",
+      "Assume perfect connectivity everywhere."
+    ],
+    explanation: "Travel products are judged in stressful, low-connectivity moments.",
+    tags: ["travel", "product"]
+  }
+];
 const spinLabels = [
   "30 second drill",
   "debug mode",
@@ -54,6 +142,29 @@ function stableSalt(value = "") {
   }, 17);
 }
 
+function greatestCommonDivisor(left, right) {
+  let a = Math.abs(left);
+  let b = Math.abs(right);
+
+  while (b) {
+    [a, b] = [b, a % b];
+  }
+
+  return a || 1;
+}
+
+function coprimeStep(length, salt) {
+  if (length <= 1) {
+    return 1;
+  }
+
+  let step = (salt % (length - 1)) + 1;
+  while (greatestCommonDivisor(step, length) !== 1) {
+    step = (step % length) + 1;
+  }
+  return step;
+}
+
 function pickAllowed(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
 }
@@ -72,6 +183,107 @@ function cleanTags(value) {
     .map((tag) => cleanText(tag, "", 24).toLowerCase())
     .filter(Boolean)
     .slice(0, 4);
+}
+
+function firstListValue(value, fallback = "") {
+  if (Array.isArray(value)) {
+    return value.find(Boolean) || fallback;
+  }
+
+  return value || fallback;
+}
+
+function stripMarkup(value) {
+  return String(value || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function fetchJson(url, { fetchImpl = fetch, timeout = INTERNET_TIMEOUT_MS, headers = {} } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetchImpl(url, {
+      signal: controller.signal,
+      headers
+    });
+
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`);
+    }
+
+    return response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function pickTrendTopic(title = "") {
+  const lowered = title.toLowerCase();
+  return trendTopics.find((topic) => topic.keywords.some((keyword) => lowered.includes(keyword))) || trendTopics[1];
+}
+
+function makeBookApiSeed(volume, query, index) {
+  const info = volume.volumeInfo || {};
+  const title = cleanText(info.title, query, 72);
+  const author = cleanText(firstListValue(info.authors, "Unknown author"), "Unknown author", 72);
+  const year = info.publishedDate ? `, published ${String(info.publishedDate).slice(0, 4)}` : "";
+  const description = cleanText(stripMarkup(info.description), "", 240);
+  const subjects = Array.isArray(info.categories)
+    ? info.categories.map((subject) => cleanText(subject, "", 34)).filter(Boolean).slice(0, 3)
+    : [];
+  const subjectLine = subjects.length ? `Google Books categories place it around ${subjects.join(", ")}.` : "Use the book as a thinking lens, not just a quote source.";
+
+  return {
+    id: `google-books-${stableSalt(`${title}-${author}`)}-${index}`,
+    type: "read",
+    category: "Book Summaries",
+    visual: "book",
+    art: title.toLowerCase().includes("money") ? "market" : "book",
+    difficulty: "internet read",
+    title,
+    hook: `${author}${year}.`,
+    body: `${description || `${title} is useful as a compact mental-model read.`} ${subjectLine} Read for one practical idea, connect it to a current decision, and turn that idea into one observable action today.`,
+    points: [
+      `Source signal: ${author}${year}.`,
+      subjects[0] ? `Main lens: ${subjects[0]}.` : "Extract one idea you can test this week.",
+      subjects[1] ? `Second lens: ${subjects[1]}.` : "Write one sentence about where the idea breaks.",
+      "Close the loop with a next action, not another saved note."
+    ],
+    reflection: `Where could "${title}" change one decision today?`,
+    xp: 10,
+    tags: ["books", "internet", "reading"],
+    sourceUrl: info.previewLink
+  };
+}
+
+function makeHackerNewsSeed(item, index) {
+  const rawTitle = cleanText(item.title, "Fresh technical trend", 120);
+  const topic = pickTrendTopic(rawTitle);
+
+  return {
+    id: `hn-${item.id || stableSalt(rawTitle)}-${index}`,
+    type: "quiz",
+    category: topic.category,
+    visual: topic.visual,
+    art: topic.art,
+    difficulty: "current",
+    title: topic.label,
+    hook: rawTitle,
+    body: topic.question(rawTitle),
+    choices: topic.choices,
+    answerIndex: 0,
+    explanation: topic.explanation,
+    xp: 14,
+    tags: [...topic.tags, "internet"],
+    sourceUrl: item.url || `https://news.ycombinator.com/item?id=${item.id}`
+  };
 }
 
 function normaliseGeneratedSeed(candidate, index) {
@@ -155,8 +367,8 @@ function makeFocusItem(sequence) {
   };
 }
 
-function makeSeedItem(sequence, { seedPool = seeds, salt = 0, source = "seed" } = {}) {
-  const seedIndex = (sequence + salt + (salt ? sequence * 3 : 0)) % seedPool.length;
+function makeSeedItem(sequence, { seedPool = seeds, salt = 0, step = 1, source = "seed" } = {}) {
+  const seedIndex = (salt + sequence * step) % seedPool.length;
   const seed = seedPool[seedIndex];
   const cycle = Math.floor(sequence / seedPool.length);
   const spin = spinLabels[sequence % spinLabels.length];
@@ -174,13 +386,14 @@ export function makeFeed({ cursor = 0, limit = DEFAULT_LIMIT, refreshKey = "", s
   const start = toPositiveInteger(cursor, 0, Number.MAX_SAFE_INTEGER);
   const size = toPositiveInteger(limit, DEFAULT_LIMIT, MAX_LIMIT);
   const salt = refreshKey ? stableSalt(refreshKey) : 0;
+  const step = refreshKey ? coprimeStep(seedPool.length, salt) : 1;
   const items = [];
 
   for (let offset = 0; offset < size; offset += 1) {
     const sequence = start + offset;
     const item = sequence > 0 && sequence % FOCUS_INTERVAL === 0
       ? makeFocusItem(sequence)
-      : makeSeedItem(sequence, { seedPool, salt, source });
+      : makeSeedItem(sequence, { seedPool, salt, step, source });
     items.push(item);
   }
 
@@ -368,8 +581,96 @@ async function generateSeedsWithProvider({ provider, refreshKey, query }) {
   throw new Error("LLM provider is off");
 }
 
-export async function makeRefreshedFeed({ cursor = 0, limit = DEFAULT_LIMIT, refreshKey = "", query = {}, allowLlm, llmProvider = resolveLlmProvider(query, allowLlm) } = {}) {
+function resolveInternetProvider(query = {}) {
+  const requested = String(query.internet || process.env.FOCUS_REELS_INTERNET_REFRESH || "on").toLowerCase();
+  return requested === "off" || requested === "false" ? "off" : "public";
+}
+
+async function fetchBookApiSeeds({ refreshKey, fetchImpl }) {
+  const start = stableSalt(refreshKey) % bookRefreshQueries.length;
+  const selectedQueries = Array.from({ length: 3 }, (_, index) => bookRefreshQueries[(start + index) % bookRefreshQueries.length]);
+  const results = await Promise.allSettled(selectedQueries.map(async (query, index) => {
+    const url = new URL(GOOGLE_BOOKS_VOLUME_URL);
+    url.searchParams.set("q", `intitle:${query}`);
+    url.searchParams.set("printType", "books");
+    url.searchParams.set("maxResults", "1");
+
+    const payload = await fetchJson(url, { fetchImpl });
+    const volume = Array.isArray(payload.items) ? payload.items[0] : null;
+    return volume ? makeBookApiSeed(volume, query, index) : null;
+  }));
+
+  return results
+    .filter((result) => result.status === "fulfilled" && result.value)
+    .map((result) => result.value);
+}
+
+async function fetchHackerNewsSeeds({ fetchImpl }) {
+  const ids = await fetchJson(`${HN_API_BASE_URL}/newstories.json`, { fetchImpl });
+  const selectedIds = Array.isArray(ids) ? ids.slice(0, 16) : [];
+  const results = await Promise.allSettled(selectedIds.map((id) => {
+    return fetchJson(`${HN_API_BASE_URL}/item/${id}.json`, {
+      fetchImpl,
+      timeout: 2400
+    });
+  }));
+
+  const stories = results
+    .filter((result) => result.status === "fulfilled" && result.value?.type === "story" && result.value?.title)
+    .map((result) => result.value);
+  const topicMatches = stories.filter((story) => {
+    const lowered = story.title.toLowerCase();
+    return trendTopics.some((topic) => topic.keywords.some((keyword) => lowered.includes(keyword)));
+  });
+  const selectedStories = (topicMatches.length >= 4 ? topicMatches : stories).slice(0, 8);
+
+  return selectedStories.map((story, index) => makeHackerNewsSeed(story, index));
+}
+
+async function generateSeedsFromInternet({ refreshKey, fetchImpl = fetch }) {
+  const results = await Promise.allSettled([
+    fetchBookApiSeeds({ refreshKey, fetchImpl }),
+    fetchHackerNewsSeeds({ fetchImpl })
+  ]);
+  const internetSeeds = results
+    .filter((result) => result.status === "fulfilled")
+    .flatMap((result) => result.value)
+    .filter(Boolean);
+
+  if (internetSeeds.length < 4) {
+    throw new Error("Internet refresh returned too few usable items");
+  }
+
+  return {
+    provider: "internet",
+    model: "open-library+hacker-news",
+    seeds: internetSeeds
+  };
+}
+
+export async function makeRefreshedFeed({ cursor = 0, limit = DEFAULT_LIMIT, refreshKey = "", query = {}, allowLlm, llmProvider = resolveLlmProvider(query, allowLlm), internetProvider = resolveInternetProvider(query), fetchImpl = fetch } = {}) {
   const key = refreshKey || query.refreshKey || query.nonce || new Date().toISOString();
+  let refreshWarning = "";
+
+  if (internetProvider !== "off") {
+    try {
+      const generated = await generateSeedsFromInternet({ refreshKey: key, fetchImpl });
+      return {
+        ...makeFeed({
+          cursor,
+          limit,
+          refreshKey: `${key}-${generated.model}`,
+          seedPool: generated.seeds,
+          source: "internet"
+        }),
+        source: "internet refresh",
+        provider: generated.provider,
+        model: generated.model
+      };
+    } catch (error) {
+      refreshWarning = error.message;
+    }
+  }
 
   if (llmProvider !== "off") {
     try {
@@ -390,14 +691,15 @@ export async function makeRefreshedFeed({ cursor = 0, limit = DEFAULT_LIMIT, ref
       return {
         ...makeFeed({ cursor, limit, refreshKey: key, source: "remix" }),
         source: "fresh remix",
-        warning: error.message
+        warning: refreshWarning ? `${refreshWarning}; ${error.message}` : error.message
       };
     }
   }
 
   return {
     ...makeFeed({ cursor, limit, refreshKey: key, source: "remix" }),
-    source: "fresh remix"
+    source: "fresh remix",
+    ...(refreshWarning ? { warning: refreshWarning } : {})
   };
 }
 
