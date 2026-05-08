@@ -1,6 +1,8 @@
 const STORE_KEY = "focus-reels-state-v1";
 const FOCUS_INTERVAL = 18;
 const BATCH_SIZE = 100;
+const SESSION_LIMIT_MS = 10 * 60 * 1000;
+const SESSION_TICK_MS = 1000;
 const MUSIC_STEPS = [
   { note: 196.0, accent: true },
   { note: 246.94 },
@@ -86,6 +88,13 @@ function topVisualMarkup(item) {
   `;
 }
 
+function formatSessionTime(milliseconds) {
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
 function railIconMarkup(name) {
   const icons = {
     like: `
@@ -113,14 +122,6 @@ function railIconMarkup(name) {
         <path d="M6 3v4.8h4.8"></path>
         <path d="M4 13a8 8 0 0 0 14.1 5.2"></path>
         <path d="M18 21v-4.8h-4.8"></path>
-      </svg>
-    `,
-    work: `
-      <svg viewBox="0 0 24 24" role="img" focusable="false">
-        <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"></path>
-        <path d="M5.5 7h13A1.5 1.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-8A1.5 1.5 0 0 1 5.5 7Z"></path>
-        <path d="M4 12.5h16"></path>
-        <path d="M10 12.5v1h4v-1"></path>
       </svg>
     `,
     music: `
@@ -156,7 +157,11 @@ class FocusReelsApp extends HTMLElement {
     this.online = navigator.onLine;
     this.source = "starting";
     this.progress = 0;
+    this.sessionElapsedMs = 0;
+    this.lastSessionTick = Date.now();
     this.scrollFrame = 0;
+    this.progressTimer = 0;
+    this.sessionTimer = 0;
     this.audioOn = false;
     this.audioContext = null;
     this.audioMaster = null;
@@ -184,6 +189,7 @@ class FocusReelsApp extends HTMLElement {
           <div class="stats-strip" aria-label="Progress stats">
             <span class="stat-pill" data-xp>0 XP</span>
             <span class="stat-pill" data-streak>0 streak</span>
+            <span class="stat-pill session-pill" title="Session timer" data-session-time>0:00</span>
             <span class="status-pill" data-status>offline ready</span>
           </div>
         </header>
@@ -191,7 +197,7 @@ class FocusReelsApp extends HTMLElement {
         <aside class="work-lock" data-work-lock>
           <div class="work-panel">
             <h2>Back to work?</h2>
-            <p>You reached a focus checkpoint. Close this loop now, or take one more intentional set.</p>
+            <p data-work-message>You have spent 10 minutes in this session. Close this loop now, or take one more intentional set.</p>
             <div class="work-actions">
               <button class="primary-action" type="button" data-action="stay-locked">Keep me stopped</button>
               <button class="secondary-action" type="button" data-action="resume-set">One more set</button>
@@ -226,6 +232,8 @@ class FocusReelsApp extends HTMLElement {
     this.feedEl?.removeEventListener("click", this.onClick);
     this.feedEl?.removeEventListener("mousedown", this.onMouseDown);
     window.removeEventListener("keydown", this.onKeyDown);
+    window.clearInterval(this.progressTimer);
+    window.clearInterval(this.sessionTimer);
   }
 
   async boot() {
@@ -235,6 +243,7 @@ class FocusReelsApp extends HTMLElement {
     await this.loadMore();
     this.renderFeed();
     this.startProgressLoop();
+    this.startSessionTimer();
   }
 
   async registerServiceWorker() {
@@ -455,9 +464,6 @@ class FocusReelsApp extends HTMLElement {
           <button class="rail-button${this.refreshing ? " is-active" : ""}" type="button" title="Refresh content" aria-label="Refresh content" data-rail="refresh" data-action="refresh">
             ${railIconMarkup("refresh")}
           </button>
-          <button class="rail-button" type="button" title="Focus" aria-label="Jump to focus check" data-rail="work" data-action="focus-now">
-            ${railIconMarkup("work")}
-          </button>
           <button class="rail-button${this.audioOn ? " is-active" : ""}" type="button" title="Music" aria-label="Toggle focus music" data-rail="music" data-action="music">
             ${railIconMarkup("music")}
           </button>
@@ -511,7 +517,7 @@ class FocusReelsApp extends HTMLElement {
       const choiceIndex = Number.parseInt(actionTarget.dataset.choiceIndex, 10);
       this.answerReel(itemId, choiceIndex);
       if (choiceIndex === 0) {
-        this.lockForWork();
+        this.lockForWork("focus");
       } else {
         this.scrollToIndex(this.currentIndex + 1);
       }
@@ -527,10 +533,6 @@ class FocusReelsApp extends HTMLElement {
 
     if (action === "share") {
       this.copyCurrentLink(itemId);
-    }
-
-    if (action === "focus-now") {
-      this.jumpToNextFocus();
     }
 
     if (action === "refresh") {
@@ -667,13 +669,6 @@ class FocusReelsApp extends HTMLElement {
     this.updateHud();
   }
 
-  jumpToNextFocus() {
-    const next = this.items.findIndex((item, index) => index > this.currentIndex && item.type === "focus");
-    if (next >= 0) {
-      this.scrollToIndex(next);
-    }
-  }
-
   scrollToIndex(index) {
     const bounded = Math.max(0, Math.min(this.items.length - 1, index));
     const height = this.feedEl.clientHeight || window.innerHeight || 1;
@@ -689,9 +684,20 @@ class FocusReelsApp extends HTMLElement {
     this.syncActiveReel();
   }
 
-  lockForWork() {
+  lockForWork(reason = "timer") {
+    if (this.locked) {
+      return;
+    }
+
     this.locked = true;
     this.paused = true;
+    this.source = reason === "timer" ? "10 min check" : "focus check";
+    const message = this.querySelector("[data-work-message]");
+    if (message) {
+      message.textContent = reason === "timer"
+        ? "You have spent 10 minutes in this session. Close this loop now, or take one more intentional set."
+        : "You reached a focus checkpoint. Close this loop now, or take one more intentional set.";
+    }
     this.lockEl.classList.add("is-visible");
     this.syncAudioState();
     this.updateHud();
@@ -700,9 +706,11 @@ class FocusReelsApp extends HTMLElement {
   unlockForOneMoreSet() {
     this.locked = false;
     this.paused = false;
+    this.sessionElapsedMs = 0;
+    this.lastSessionTick = Date.now();
+    this.source = "next 10 min";
     this.lockEl.classList.remove("is-visible");
     this.syncAudioState();
-    this.scrollToIndex(this.currentIndex + 1);
     this.updateHud();
   }
 
@@ -872,12 +880,47 @@ class FocusReelsApp extends HTMLElement {
   }
 
   startProgressLoop() {
-    window.setInterval(() => {
+    if (this.progressTimer) {
+      return;
+    }
+
+    this.progressTimer = window.setInterval(() => {
       if (!this.paused && !this.locked) {
         this.progress = (this.progress + 2) % 100;
         this.updateProgressBar();
       }
     }, 300);
+  }
+
+  startSessionTimer() {
+    if (this.sessionTimer) {
+      return;
+    }
+
+    this.lastSessionTick = Date.now();
+    this.sessionTimer = window.setInterval(() => this.tickSessionTimer(), SESSION_TICK_MS);
+    this.updateHud();
+  }
+
+  tickSessionTimer() {
+    const now = Date.now();
+    const delta = now - this.lastSessionTick;
+    this.lastSessionTick = now;
+
+    if (document.hidden || this.locked) {
+      this.updateHud();
+      return;
+    }
+
+    this.sessionElapsedMs += Math.min(delta, SESSION_TICK_MS * 2);
+
+    if (this.sessionElapsedMs >= SESSION_LIMIT_MS) {
+      this.sessionElapsedMs = SESSION_LIMIT_MS;
+      this.lockForWork("timer");
+      return;
+    }
+
+    this.updateHud();
   }
 
   updateProgressBar() {
@@ -891,6 +934,7 @@ class FocusReelsApp extends HTMLElement {
     const subtitle = this.querySelector("[data-hud-subtitle]");
     const xp = this.querySelector("[data-xp]");
     const streak = this.querySelector("[data-streak]");
+    const sessionTime = this.querySelector("[data-session-time]");
     const status = this.querySelector("[data-status]");
 
     if (subtitle) {
@@ -901,6 +945,9 @@ class FocusReelsApp extends HTMLElement {
     }
     if (streak) {
       streak.textContent = `${this.stats.streak} streak`;
+    }
+    if (sessionTime) {
+      sessionTime.textContent = formatSessionTime(this.sessionElapsedMs);
     }
     if (status) {
       if (this.refreshing) {

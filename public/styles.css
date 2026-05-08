@@ -530,13 +530,6 @@ focus-reels-app {
   --rail-hover: rgba(52, 211, 153, 0.16);
 }
 
-.rail-button[data-rail="work"] {
-  --rail-bg: rgba(255, 159, 28, 0.1);
-  --rail-border: rgba(255, 159, 28, 0.24);
-  --rail-color: #ffb24d;
-  --rail-hover: rgba(255, 159, 28, 0.16);
-}
-
 .rail-button[data-rail="music"] {
   --rail-bg: rgba(186, 150, 255, 0.1);
   --rail-border: rgba(186, 150, 255, 0.23);

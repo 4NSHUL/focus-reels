@@ -8,7 +8,7 @@ An offline-first reels-style game that makes scrolling useful. It mixes software
 - Click, middle-click, `Space`, or `K` to play and pause the current reel.
 - Keyboard navigation with `ArrowUp`, `ArrowDown`, `J`, and `L`.
 - Micro quizzes, summaries, and decision drills with XP and streak tracking.
-- Focus checkpoints that interrupt long sessions and nudge you back to work.
+- Focus checkpoints plus a 10-minute session timer that nudges you back to work.
 - Offline support after first load through a service worker and local seed feed.
 - Fullstack Vercel function at `/api/feed` that returns the next 100 feed items.
 - Refresh button that pulls a new 100-item batch from public internet sources, then falls back to LLM or remix.
